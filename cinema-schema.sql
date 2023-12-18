@@ -238,7 +238,9 @@ INSERT INTO cash_registers (id, num, work_start, work_end, cashier) VALUES
 	(1, 7, '12:00:00', '00:00:00', 2),
 	(2, 9, '12:00:00', '00:00:00', 3),
 	(3, 1, '14:00:00', '02:00:00', 4),
-	(4, 2, '14:00:00', '02:00:00', 1);
+	(4, 2, '14:00:00', '02:00:00', 1),
+	(5, 4, '10:00:00', '22:00:00', 1),
+	(6, 3, '8:00:00', '20:00:00', 3);
 
 INSERT INTO movies (id, name_eng, name_rus, realese_year, tagline, duration_seconds, director) VALUES
 	(1, 'Kill Bill', 'Убить Билла', 2003, 'In the year 2003, Uma Thurman will kill Bill.', 7253, 4),
