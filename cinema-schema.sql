@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS movies (
 	id serial NOT NULL,
 	name_eng TEXT NOT NULL,
 	name_rus TEXT NOT NULL,
-	realese_year int NOT NULL,
+	release_year int NOT NULL,
 	tagline TEXT NOT NULL,
 	duration_seconds integer NOT NULL,
 	director integer NOT NULL,
@@ -128,7 +128,7 @@ COMMENT ON TABLE movies IS 'movies';
 COMMENT ON COLUMN movies.id IS 'movie primary key id';
 COMMENT ON COLUMN movies.name_eng IS 'movie name on english';
 COMMENT ON COLUMN movies.name_rus IS 'movie name on russian';
-COMMENT ON COLUMN movies.realese_year IS 'movie realease year';
+COMMENT ON COLUMN movies.release_year IS 'movie realease year';
 COMMENT ON COLUMN movies.tagline IS 'movie tagline';
 COMMENT ON COLUMN movies.duration_seconds IS 'movie duration in seconds';
 COMMENT ON COLUMN movies.director IS 'movie director foregin key id';
@@ -242,7 +242,7 @@ INSERT INTO cash_registers (id, num, work_start, work_end, cashier) VALUES
 	(5, 4, '10:00:00', '22:00:00', 1),
 	(6, 3, '8:00:00', '20:00:00', 3);
 
-INSERT INTO movies (id, name_eng, name_rus, realese_year, tagline, duration_seconds, director) VALUES
+INSERT INTO movies (id, name_eng, name_rus, release_year, tagline, duration_seconds, director) VALUES
 	(1, 'Kill Bill', 'Убить Билла', 2003, 'In the year 2003, Uma Thurman will kill Bill.', 7253, 4),
 	(2, 'Django The Unchained', 'Джанго освобождённый', 2012, 'Life, liberty and the pursuit of vengeance.', 8312, 4),
 	(3, 'Inception', 'Начало', 2010, 'Your mind is the scene of the crime.', 6931, 5),
