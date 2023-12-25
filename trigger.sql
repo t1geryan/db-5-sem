@@ -1,6 +1,7 @@
 -- region drop
 
 DROP TRIGGER IF EXISTS session_creating_trigger ON movies CASCADE;
+DROP FUNCTION IF EXISTS create_session();
 
 -- endregion
 -- region create

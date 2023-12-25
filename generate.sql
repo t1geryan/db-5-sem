@@ -1,39 +1,36 @@
+-- region drop
+
+DROP FUNCTION IF EXISTS generate_soled_tickets(count INTEGER);
+DROP FUNCTION IF EXISTS generate_soled_ticket();
+DROP FUNCTION IF EXISTS generate_directors(count INTEGER);
+DROP FUNCTION IF EXISTS generate_director();
+DROP FUNCTION IF EXISTS random_number(min_val integer, max_val integer);
+DROP FUNCTION IF EXISTS random_string(length INTEGER);
+
+-- endregion
 -- region generating movies
 
-CREATE OR REPLACE FUNCTION generate_movies(count INTEGER)
+CREATE OR REPLACE FUNCTION generate_soled_tickets(count INTEGER)
 RETURNS VOID AS $$
 BEGIN
-    -- Generate $count movies
+    -- Generate $count sessions
     FOR i IN 1..count LOOP
-        PERFORM generate_movie();
+        PERFORM generate_soled_ticket();
     END LOOP;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION generate_movie()
+CREATE OR REPLACE FUNCTION generate_soled_ticket()
 RETURNS VOID AS $$
 DECLARE
-    name_eng TEXT;
-    name_rus TEXT;
-    release_year INT;
-    tagline TEXT;
-    duration_seconds INT;
-    director_id INT;
+    session_id INT;
+    cash_register_id INT;
 BEGIN
-    -- Generate random data for movie
-    name_eng := random_string(10);
-    name_rus := random_string(10);
-    release_year := floor(random() * 100) + date_part('year', CURRENT_DATE);
-    tagline := random_string(20);
-    duration_seconds := floor(random() * 7200) + 3600;
-    -- Generate director is there no one
-    IF (SELECT COUNT(*) FROM directors) = 0 THEN
-        PERFORM generate_director();
-    END IF;
-    director_id := (SELECT id FROM directors ORDER BY random() LIMIT 1);
+    session_id := (SELECT id FROM sessions ORDER BY random() LIMIT 1);
+    cash_register_id := (SELECT id FROM cash_registers ORDER BY random() LIMIT 1);
     
-    INSERT INTO movies (name_eng, name_rus, release_year, tagline, duration_seconds, director)
-    VALUES (name_eng, name_rus, release_year, tagline, duration_seconds, director_id);
+    INSERT INTO soled_tickets (session, cost_rub, place_num, cash_register)
+    VALUES (session_id, random_number(100, 1000), random_number(1, 100), cash_register_id);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -66,6 +63,14 @@ $$ LANGUAGE plpgsql;
 
 -- endregion
 -- region utils
+CREATE OR REPLACE FUNCTION random_number(min_val integer, max_val integer)
+  RETURNS integer AS
+$$
+BEGIN
+  RETURN FLOOR((RANDOM() * (max_val - min_val + 1)) + min_val);
+END;
+$$
+LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION random_string(length INTEGER)
 RETURNS TEXT AS $$
@@ -86,6 +91,3 @@ END;
 $$ LANGUAGE plpgsql;
 
 --endregion
-
--- SELECT generate_directors(num);
--- SELECT generate_movies(num);

@@ -280,3 +280,294 @@ INSERT INTO soled_tickets (id, session, cost_rub, place_num, cash_register) VALU
 	(DEFAULT, 6, 300.99, 99, 4);
 
 -- endregion
+
+-- region drop views
+
+DROP VIEW IF EXISTS active_sessions;
+DROP VIEW IF EXISTS active_tickets_with_movies_and_halls;
+DROP VIEW IF EXISTS cash_registers_with_cashiers;
+DROP VIEW IF EXISTS revenue_from_each_movie;
+
+-- endregion
+-- region create views
+
+CREATE VIEW active_sessions AS
+	SELECT (SELECT m.name_eng FROM movies AS m WHERE m.id = s.movie) "Movie",
+	s.start_datetime "Start time",
+	s.end_datetime "End time",
+	(SELECT h.num FROM halls AS h WHERE id = s.hall) "Hall #"
+	FROM sessions as s
+	WHERE end_datetime > now()::TIMESTAMP;
+
+CREATE VIEW active_tickets_with_movies_and_halls AS
+	SELECT st.id "Ticket ID", 
+			st.cost_rub "Cost rubles",
+		    (SELECT m.name_eng FROM movies AS m WHERE m.id = s.movie) "Movie",
+			(SELECT h.num FROM halls AS h WHERE id = s.hall) "Hall #"
+	FROM soled_tickets AS st
+	LEFT JOIN sessions AS s
+	ON st.session = s.id
+	WHERE (SELECT end_datetime FROM sessions AS s WHERE s.id = st.session) > now()::TIMESTAMP;
+
+CREATE VIEW cash_registers_with_cashiers AS
+	SELECT cr.num "Cash Register #", cr.work_start "Work start", cr.work_end "Work end", c.name || ' ' || c.surname "Cashier"
+	FROM cash_registers AS cr
+	LEFT JOIN cashiers AS c
+	ON c.id = cr.cashier
+	ORDER BY cr.num;
+
+CREATE VIEW revenue_from_each_movie AS
+	SELECT (SELECT m.id FROM movies AS m WHERE m.id = s.movie) "Movie", sum(st.cost_rub) "Revenue"
+	FROM soled_tickets AS st
+	LEFT JOIN sessions AS s
+	ON st.session = s.id
+	GROUP BY (SELECT m.id FROM movies AS m WHERE m.id = s.movie);
+
+-- endregion	
+-- region comments
+
+COMMENT ON VIEW active_sessions IS 'Returns info about active sessions';
+	
+COMMENT ON VIEW active_tickets_with_movies_and_halls IS 'Returns all active soled tickets with movie name and hall number';
+
+COMMENT ON VIEW cash_registers_with_cashiers IS 'Returns info about cash registers and cashiers';
+
+COMMENT ON VIEW revenue_from_each_movie IS 'Returns sum of all soled tickets cost for each movie';
+
+-- endregion
+-- region index
+
+DROP INDEX IF EXISTS movies_director_index;
+DROP INDEX IF EXISTS movies_year_index;
+DROP INDEX IF EXISTS soled_tickets_session_index;
+
+CREATE INDEX IF NOT EXISTS movies_director_index
+	ON movies
+	(director);
+	
+CREATE INDEX IF NOT EXISTS movies_year_index
+	ON movies
+	(release_year);
+	
+CREATE INDEX IF NOT EXISTS soled_tickets_session_index
+	ON soled_tickets
+	(session);
+
+COMMENT ON INDEX movies_director_index IS 'Movies index by director';
+COMMENT ON INDEX movies_year_index IS 'Movies index by year';
+COMMENT ON INDEX soled_tickets_session_index IS 'Soled tickets by session id';
+
+-- endregion
+-- region drop trigger
+
+DROP TRIGGER IF EXISTS session_creating_trigger ON movies CASCADE;
+
+-- endregion
+-- region create trigger
+
+CREATE OR REPLACE FUNCTION create_session()
+RETURNS TRIGGER AS $$
+BEGIN
+    DECLARE
+        hall_id INTEGER;
+    BEGIN
+        SELECT id INTO hall_id FROM halls ORDER BY RANDOM() LIMIT 1;
+
+        INSERT INTO sessions (start_datetime, end_datetime, movie, hall)
+        VALUES (CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 second' * NEW.duration_seconds + INTERVAL '15 minutes', NEW.id, hall_id);
+    
+        RETURN NEW;
+    END;
+END;
+$$ LANGUAGE plpgsql;
+		
+CREATE TRIGGER session_creating_trigger
+AFTER INSERT ON movies
+FOR EACH ROW
+EXECUTE FUNCTION create_session();
+
+-- endregion
+-- region enable/disable trigger
+
+--ALTER TABLE movies DISABLE TRIGGER session_creating_trigger;
+--ALTER TABLE movies ENABLE TRIGGER session_creating_trigger;
+
+-- endregion
+-- region comment trigger
+
+COMMENT ON TRIGGER session_creating_trigger ON movies IS 'Create session after new movie instertion with random hall and duration equal movie duration + 15 minutes';
+
+-- endregion
+-- region generating movies
+
+CREATE OR REPLACE FUNCTION generate_soled_tickets(count INTEGER)
+RETURNS VOID AS $$
+BEGIN
+    -- Generate $count sessions
+    FOR i IN 1..count LOOP
+        PERFORM generate_soled_ticket();
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION generate_soled_ticket()
+RETURNS VOID AS $$
+DECLARE
+    session_id INT;
+    cash_register_id INT;
+BEGIN
+    session_id := (SELECT id FROM sessions ORDER BY random() LIMIT 1);
+    cash_register_id := (SELECT id FROM cash_registers ORDER BY random() LIMIT 1);
+    
+    INSERT INTO soled_tickets (session, cost_rub, place_num, cash_register)
+    VALUES (session_id, random_number(100, 1000), random_number(1, 100), cash_register_id);
+END;
+$$ LANGUAGE plpgsql;
+
+-- endregion
+-- region generating directors
+
+CREATE OR REPLACE FUNCTION generate_directors(count INTEGER)
+RETURNS VOID AS $$
+BEGIN
+    -- Generate $count directors
+    FOR i IN 1..count LOOP
+        PERFORM generate_director();
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION generate_director()
+RETURNS VOID AS $$
+DECLARE
+    name TEXT;
+    surname TEXT;
+BEGIN
+    -- Generate name and surname with specific length
+    name := random_string(5);
+    surname := random_string(8);
+    
+    INSERT INTO directors (name, surname) VALUES (name, surname);
+END;
+$$ LANGUAGE plpgsql;
+
+-- endregion
+-- region utils
+CREATE OR REPLACE FUNCTION random_number(min_val integer, max_val integer)
+  RETURNS integer AS
+$$
+BEGIN
+  RETURN FLOOR((RANDOM() * (max_val - min_val + 1)) + min_val);
+END;
+$$
+LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION random_string(length INTEGER)
+RETURNS TEXT AS $$
+DECLARE
+    i INTEGER;
+    result TEXT;
+BEGIN
+    result := '';
+    
+    -- Genereate string with specific length
+    FOR i IN 1..length LOOP
+        -- Generate random ASCII latin upper letter
+        result := result || chr(65 + floor(random() * 26)::integer);
+    END LOOP;
+    
+    RETURN result;
+END;
+$$ LANGUAGE plpgsql;
+
+--endregion
+-- region dropping roles
+
+-- REASSIGN OWNED BY cinema_cashier TO movsisian_tg;
+-- DROP OWNED BY cinema_cashier;
+-- REASSIGN OWNED BY director_user TO movsisian_tg;
+-- DROP OWNED BY director_user;
+-- REASSIGN OWNED BY viewer_user TO movsisian_tg;
+-- DROP OWNED BY viewer_user;
+-- REVOKE TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA public FROM cinema_cashier, cinema_manager, cinema_viewer;
+-- DROP ROLE IF EXISTS cinema_cashier, cinema_manager, cinema_viewer;
+-- endregion
+-- region creating roles
+
+CREATE ROLE cinema_cashier WITH
+  	LOGIN
+  	NOINHERIT
+  	NOCREATEDB
+  	NOCREATEROLE
+  	VALID UNTIL '2024-01-25 00:00:00+00';
+
+CREATE ROLE cinema_manager WITH
+  	LOGIN
+  	NOINHERIT
+  	NOCREATEDB
+  	NOCREATEROLE
+  	VALID UNTIL '2024-01-25 00:00:00+00';
+
+CREATE ROLE cinema_viewer WITH
+  	LOGIN
+	NOINHERIT
+	NOCREATEDB
+	NOCREATEROLE
+	VALID UNTIL '2024-01-25 00:00:00+00';
+
+-- endregion
+-- region search path
+
+ALTER ROLE cinema_cashier IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
+ALTER ROLE cinema_manager IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
+ALTER ROLE cinema_viewer IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
+
+-- endregion
+-- region grant privilege
+
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA cinema_schema FROM cinema_cashier;
+GRANT CONNECT ON DATABASE movsisian_tg_db TO cinema_cashier;
+GRANT USAGE ON SCHEMA cinema_schema TO cinema_cashier;
+GRANT SELECT, INSERT, UPDATE ON cash_registers TO cinema_cashier;
+GRANT SELECT, INSERT, UPDATE, DELETE ON soled_tickets TO cinema_cashier;
+GRANT SELECT ON sessions TO cinema_cashier;
+GRANT SELECT ON halls TO cinema_cashier;
+GRANT SELECT ON movies TO cinema_manager;
+
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA cinema_schema FROM cinema_manager;
+GRANT CONNECT ON DATABASE movsisian_tg_db TO cinema_manager;
+GRANT USAGE ON SCHEMA cinema_schema TO cinema_manager;
+GRANT SELECT, INSERT, UPDATE ON halls TO cinema_manager;
+GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON sessions TO cinema_manager;
+GRANT SELECT, UPDATE on cash_registers TO cinema_manager;
+GRANT SELECT, UPDATE ON cashiers TO cinema_manager;
+GRANT SELECT ON soled_tickets TO cinema_manager;
+GRANT SELECT ON movies TO cinema_manager;
+
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA cinema_schema FROM cinema_viewer;
+REVOKE ALL PRIVILEGES ON active_sessions FROM cinema_viewer;
+GRANT CONNECT ON DATABASE movsisian_tg_db TO cinema_viewer;
+GRANT USAGE ON SCHEMA cinema_schema TO cinema_viewer;
+GRANT SELECT ON movies TO cinema_viewer;
+GRANT SELECT ON active_sessions TO cinema_viewer;
+
+-- endregion
+-- region create users
+
+CREATE USER cashier_user WITH PASSWORD 'cashier_password';
+GRANT cinema_cashier TO cashier_user;
+
+CREATE USER director_user WITH PASSWORD 'director_password';
+GRANT cinema_manager TO director_user;
+
+CREATE USER viewer_user WITH PASSWORD 'viewer_password';
+GRANT cinema_viewer TO viewer_user;
+
+-- endregion
+-- region user search path
+
+ALTER ROLE cashier_user IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
+ALTER ROLE director_user IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
+ALTER ROLE viewer_user IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
+
+-- endregion

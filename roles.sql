@@ -13,7 +13,6 @@ DROP ROLE IF EXISTS cinema_cashier, cinema_manager, cinema_viewer;
 -- region creating roles
 
 CREATE ROLE cinema_cashier WITH
-	CONNECT
   	LOGIN
   	NOINHERIT
   	NOCREATEDB
@@ -21,7 +20,6 @@ CREATE ROLE cinema_cashier WITH
   	VALID UNTIL '2024-01-25 00:00:00+00';
 
 CREATE ROLE cinema_manager WITH
-	CONNECT
   	LOGIN
   	NOINHERIT
   	NOCREATEDB
@@ -29,7 +27,6 @@ CREATE ROLE cinema_manager WITH
   	VALID UNTIL '2024-01-25 00:00:00+00';
 
 CREATE ROLE cinema_viewer WITH
-	CONNECT
   	LOGIN
 	NOINHERIT
 	NOCREATEDB
@@ -46,6 +43,7 @@ ALTER ROLE cinema_viewer IN DATABASE movsisian_tg_db SET search_path TO cinema_s
 -- endregion
 -- region grant privilege
 
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA cinema_schema FROM cinema_cashier;
 GRANT CONNECT ON DATABASE movsisian_tg_db TO cinema_cashier;
 GRANT USAGE ON SCHEMA cinema_schema TO cinema_cashier;
 GRANT SELECT, INSERT, UPDATE ON cash_registers TO cinema_cashier;
@@ -54,6 +52,7 @@ GRANT SELECT ON sessions TO cinema_cashier;
 GRANT SELECT ON halls TO cinema_cashier;
 GRANT SELECT ON movies TO cinema_manager;
 
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA cinema_schema FROM cinema_manager;
 GRANT CONNECT ON DATABASE movsisian_tg_db TO cinema_manager;
 GRANT USAGE ON SCHEMA cinema_schema TO cinema_manager;
 GRANT SELECT, INSERT, UPDATE ON halls TO cinema_manager;
@@ -63,10 +62,12 @@ GRANT SELECT, UPDATE ON cashiers TO cinema_manager;
 GRANT SELECT ON soled_tickets TO cinema_manager;
 GRANT SELECT ON movies TO cinema_manager;
 
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA cinema_schema FROM cinema_viewer;
+REVOKE ALL PRIVILEGES ON active_sessions FROM cinema_viewer;
 GRANT CONNECT ON DATABASE movsisian_tg_db TO cinema_viewer;
 GRANT USAGE ON SCHEMA cinema_schema TO cinema_viewer;
 GRANT SELECT ON movies TO cinema_viewer;
-GRANT SELECT ON sessions TO cinema_viewer;
+GRANT SELECT ON active_sessions TO cinema_viewer;
 
 -- endregion
 -- region create users
