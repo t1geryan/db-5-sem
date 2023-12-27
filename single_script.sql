@@ -1,14 +1,23 @@
--- region creating schema
+-- region deleting objects
 
-DROP SCHEMA IF EXISTS cinema_schema CASCADE;
-CREATE SCHEMA IF NOT EXISTS cinema_schema AUTHORIZATION movsisian_tg;
-COMMENT ON SCHEMA cinema_schema IS 'cinema schema';
+DROP TRIGGER IF EXISTS session_creating_trigger ON movies;
 
-GRANT ALL ON SCHEMA cinema_schema TO movsisian_tg;
-ALTER ROLE movsisian_tg IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
+DROP FUNCTION IF EXISTS create_session();
+DROP FUNCTION IF EXISTS generate_director();
+DROP FUNCTION IF EXISTS generate_directors(INTEGER);
+DROP FUNCTION IF EXISTS random_number(INTEGER,INTEGER);
+DROP FUNCTION IF EXISTS random_string(INTEGER);
+DROP FUNCTION IF EXISTS generate_soled_ticket();
+DROP FUNCTION IF EXISTS generate_soled_tickets(INTEGER);
 
--- endregion
--- region deleting tables
+DROP INDEX IF EXISTS movies_director_index;
+DROP INDEX IF EXISTS movies_year_index;
+DROP INDEX IF EXISTS soled_tickets_session_index;
+
+DROP VIEW IF EXISTS active_sessions;
+DROP VIEW IF EXISTS active_tickets_with_movies_and_halls;
+DROP VIEW IF EXISTS cash_registers_with_cashiers;
+DROP VIEW IF EXISTS revenue_from_each_movie;
 
 DROP TABLE IF EXISTS soled_tickets;
 DROP TABLE IF EXISTS sessions;
@@ -17,9 +26,21 @@ DROP TABLE IF EXISTS halls;
 DROP TABLE IF EXISTS directors;
 DROP TABLE IF EXISTS cash_registers;
 DROP TABLE IF EXISTS cashiers;
-
+DROP SCHEMA IF EXISTS cinema_schema;
+REVOKE CONNECT ON DATABASE movsisian_tg_db FROM mt_cinema_cashier, mt_cinema_manager, mt_cinema_viewer;
+DROP ROLE IF EXISTS mt_cinema_cashier, mt_cinema_manager, mt_cinema_viewer;
+DROP ROLE IF EXISTS mt_cashier_user, mt_director_user, mt_viewer_user;
 
 -- endregion 
+-- region creating schema
+
+CREATE SCHEMA IF NOT EXISTS cinema_schema AUTHORIZATION movsisian_tg;
+COMMENT ON SCHEMA cinema_schema IS 'cinema schema';
+
+GRANT ALL ON SCHEMA cinema_schema TO movsisian_tg;
+ALTER ROLE movsisian_tg IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
+
+-- endregion
 -- region creating tables
 
 
@@ -280,15 +301,6 @@ INSERT INTO soled_tickets (id, session, cost_rub, place_num, cash_register) VALU
 	(DEFAULT, 6, 300.99, 99, 4);
 
 -- endregion
-
--- region drop views
-
-DROP VIEW IF EXISTS active_sessions;
-DROP VIEW IF EXISTS active_tickets_with_movies_and_halls;
-DROP VIEW IF EXISTS cash_registers_with_cashiers;
-DROP VIEW IF EXISTS revenue_from_each_movie;
-
--- endregion
 -- region create views
 
 CREATE VIEW active_sessions AS
@@ -337,10 +349,6 @@ COMMENT ON VIEW revenue_from_each_movie IS 'Returns sum of all soled tickets cos
 -- endregion
 -- region index
 
-DROP INDEX IF EXISTS movies_director_index;
-DROP INDEX IF EXISTS movies_year_index;
-DROP INDEX IF EXISTS soled_tickets_session_index;
-
 CREATE INDEX IF NOT EXISTS movies_director_index
 	ON movies
 	(director);
@@ -356,11 +364,6 @@ CREATE INDEX IF NOT EXISTS soled_tickets_session_index
 COMMENT ON INDEX movies_director_index IS 'Movies index by director';
 COMMENT ON INDEX movies_year_index IS 'Movies index by year';
 COMMENT ON INDEX soled_tickets_session_index IS 'Soled tickets by session id';
-
--- endregion
--- region drop trigger
-
-DROP TRIGGER IF EXISTS session_creating_trigger ON movies CASCADE;
 
 -- endregion
 -- region create trigger
@@ -481,35 +484,24 @@ END;
 $$ LANGUAGE plpgsql;
 
 --endregion
--- region dropping roles
-
--- REASSIGN OWNED BY cinema_cashier TO movsisian_tg;
--- DROP OWNED BY cinema_cashier;
--- REASSIGN OWNED BY director_user TO movsisian_tg;
--- DROP OWNED BY director_user;
--- REASSIGN OWNED BY viewer_user TO movsisian_tg;
--- DROP OWNED BY viewer_user;
--- REVOKE TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA public FROM cinema_cashier, cinema_manager, cinema_viewer;
--- DROP ROLE IF EXISTS cinema_cashier, cinema_manager, cinema_viewer;
--- endregion
 -- region creating roles
 
-CREATE ROLE cinema_cashier WITH
-  	LOGIN
+CREATE ROLE mt_cinema_cashier WITH
+  	NOLOGIN
   	NOINHERIT
   	NOCREATEDB
   	NOCREATEROLE
   	VALID UNTIL '2024-01-25 00:00:00+00';
 
-CREATE ROLE cinema_manager WITH
-  	LOGIN
+CREATE ROLE mt_cinema_manager WITH
+  	NOLOGIN
   	NOINHERIT
   	NOCREATEDB
   	NOCREATEROLE
   	VALID UNTIL '2024-01-25 00:00:00+00';
 
-CREATE ROLE cinema_viewer WITH
-  	LOGIN
+CREATE ROLE mt_cinema_viewer WITH
+  NOLOGIN
 	NOINHERIT
 	NOCREATEDB
 	NOCREATEROLE
@@ -518,56 +510,60 @@ CREATE ROLE cinema_viewer WITH
 -- endregion
 -- region search path
 
-ALTER ROLE cinema_cashier IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
-ALTER ROLE cinema_manager IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
-ALTER ROLE cinema_viewer IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
+ALTER ROLE mt_cinema_cashier IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
+ALTER ROLE mt_cinema_manager IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
+ALTER ROLE mt_cinema_viewer IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
 
 -- endregion
 -- region grant privilege
 
-REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA cinema_schema FROM cinema_cashier;
-GRANT CONNECT ON DATABASE movsisian_tg_db TO cinema_cashier;
-GRANT USAGE ON SCHEMA cinema_schema TO cinema_cashier;
-GRANT SELECT, INSERT, UPDATE ON cash_registers TO cinema_cashier;
-GRANT SELECT, INSERT, UPDATE, DELETE ON soled_tickets TO cinema_cashier;
-GRANT SELECT ON sessions TO cinema_cashier;
-GRANT SELECT ON halls TO cinema_cashier;
-GRANT SELECT ON movies TO cinema_manager;
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA cinema_schema FROM mt_cinema_cashier;
+GRANT CONNECT ON DATABASE movsisian_tg_db TO mt_cinema_cashier;
+GRANT USAGE ON SCHEMA cinema_schema TO mt_cinema_cashier;
+GRANT SELECT, INSERT, UPDATE ON cash_registers TO mt_cinema_cashier;
+GRANT SELECT, INSERT, UPDATE, DELETE ON soled_tickets TO mt_cinema_cashier;
+GRANT USAGE, SELECT ON SEQUENCE cash_registers_id_seq TO mt_cinema_cashier;
+GRANT USAGE, SELECT ON SEQUENCE soled_tickets_id_seq TO mt_cinema_cashier;
+GRANT SELECT ON sessions TO mt_cinema_cashier;
+GRANT SELECT ON halls TO mt_cinema_cashier;
+GRANT SELECT ON movies TO mt_cinema_cashier;
 
-REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA cinema_schema FROM cinema_manager;
-GRANT CONNECT ON DATABASE movsisian_tg_db TO cinema_manager;
-GRANT USAGE ON SCHEMA cinema_schema TO cinema_manager;
-GRANT SELECT, INSERT, UPDATE ON halls TO cinema_manager;
-GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON sessions TO cinema_manager;
-GRANT SELECT, UPDATE on cash_registers TO cinema_manager;
-GRANT SELECT, UPDATE ON cashiers TO cinema_manager;
-GRANT SELECT ON soled_tickets TO cinema_manager;
-GRANT SELECT ON movies TO cinema_manager;
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA cinema_schema FROM mt_cinema_manager;
+GRANT CONNECT ON DATABASE movsisian_tg_db TO mt_cinema_manager;
+GRANT USAGE ON SCHEMA cinema_schema TO mt_cinema_manager;
+GRANT SELECT, INSERT, UPDATE ON halls TO mt_cinema_manager;
+GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON sessions TO mt_cinema_manager;
+GRANT USAGE, SELECT ON SEQUENCE halls_id_seq TO mt_cinema_manager;
+GRANT USAGE, SELECT ON SEQUENCE sessions_id_seq TO mt_cinema_manager;
+GRANT SELECT, UPDATE ON cash_registers TO mt_cinema_manager;
+GRANT SELECT, UPDATE ON cashiers TO mt_cinema_manager;
+GRANT SELECT ON soled_tickets TO mt_cinema_manager;
+GRANT SELECT ON movies TO mt_cinema_manager;
 
-REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA cinema_schema FROM cinema_viewer;
-REVOKE ALL PRIVILEGES ON active_sessions FROM cinema_viewer;
-GRANT CONNECT ON DATABASE movsisian_tg_db TO cinema_viewer;
-GRANT USAGE ON SCHEMA cinema_schema TO cinema_viewer;
-GRANT SELECT ON movies TO cinema_viewer;
-GRANT SELECT ON active_sessions TO cinema_viewer;
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA cinema_schema FROM mt_cinema_viewer;
+REVOKE ALL PRIVILEGES ON active_sessions FROM mt_cinema_viewer;
+GRANT CONNECT ON DATABASE movsisian_tg_db TO mt_cinema_viewer;
+GRANT USAGE ON SCHEMA cinema_schema TO mt_cinema_viewer;
+GRANT SELECT ON movies TO mt_cinema_viewer;
+GRANT SELECT ON active_sessions TO mt_cinema_viewer;
 
 -- endregion
 -- region create users
 
-CREATE USER cashier_user WITH PASSWORD 'cashier_password';
-GRANT cinema_cashier TO cashier_user;
+CREATE USER mt_cashier_user WITH PASSWORD 'cashier_password';
+GRANT mt_cinema_cashier TO mt_cashier_user;
 
-CREATE USER director_user WITH PASSWORD 'director_password';
-GRANT cinema_manager TO director_user;
+CREATE USER mt_director_user WITH PASSWORD 'director_password';
+GRANT mt_cinema_manager TO mt_director_user;
 
-CREATE USER viewer_user WITH PASSWORD 'viewer_password';
-GRANT cinema_viewer TO viewer_user;
+CREATE USER mt_viewer_user WITH PASSWORD 'viewer_password';
+GRANT mt_cinema_viewer TO mt_viewer_user;
 
 -- endregion
 -- region user search path
 
-ALTER ROLE cashier_user IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
-ALTER ROLE director_user IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
-ALTER ROLE viewer_user IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
+ALTER ROLE mt_cashier_user IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
+ALTER ROLE mt_director_user IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
+ALTER ROLE mt_viewer_user IN DATABASE movsisian_tg_db SET search_path TO cinema_schema, public;
 
 -- endregion
